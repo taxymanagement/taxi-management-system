@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="gu">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#101827"><meta name="description" content="Taxi Registration પેમેન્ટ અને રજીસ્ટ્રેશન સ્ટેટસ તપાસો">
+<title>રજીસ્ટ્રેશન સ્ટેટસ | Taxi Registration</title>
+<style>
+:root{--ink:#101827;--muted:#64748b;--line:#e5eaf1;--paper:#f5f7fb;--blue:#2457e6}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font-family:system-ui,-apple-system,"Noto Sans Gujarati",sans-serif}
+header{background:var(--ink);color:white;padding:16px 5vw;display:flex;align-items:center;justify-content:space-between}.brand{font-weight:800;font-size:18px}.brand small{display:block;color:#aab5c8;font-size:10px;letter-spacing:1.4px}.logo{display:inline-grid;place-items:center;background:#ffbd45;color:#172033;width:38px;height:38px;border-radius:11px;margin-right:9px}
+main{max-width:620px;margin:55px auto;padding:0 16px 50px}.intro{text-align:center;margin-bottom:25px}.intro h1{font-size:clamp(26px,5vw,36px);margin:8px 0}.intro p{color:var(--muted);line-height:1.7}
+.panel{background:white;border:1px solid var(--line);border-radius:20px;box-shadow:0 12px 40px #1d35570d;padding:24px}.field{margin-bottom:17px}.field label{display:block;font-size:14px;font-weight:700;margin-bottom:7px}.field input{width:100%;padding:14px;border:1px solid #dce3ee;border-radius:10px;font:inherit;outline:none}.field input:focus{border-color:var(--blue);box-shadow:0 0 0 3px #2457e615}
+button{width:100%;background:var(--blue);color:white;border:0;border-radius:11px;padding:15px;font:inherit;font-weight:800;cursor:pointer}button:disabled{opacity:.6}.result{display:none;margin-top:18px;padding:15px;border-radius:10px;font-size:14px;line-height:1.8;overflow-wrap:anywhere}.result.show{display:block}.info{background:#fff7e8;color:#80520b}.error{background:#fff0f0;color:#a33232}.success{background:#edf9f0;color:#176b35}.back{text-align:center;margin-top:20px}.back a{color:var(--blue);text-decoration:none;font-weight:700}.hint{font-size:12px;color:var(--muted);line-height:1.7;margin-top:18px}
+@media(max-width:600px){header{padding:14px 17px}main{margin:35px auto}.panel{padding:19px}}
+</style>
+</head>
+<body>
+<header><div><span class="logo">🚕</span><span class="brand">Taxi Registration<small>ONLINE REGISTRATION PORTAL</small></span></div></header>
+<main>
+<section class="intro"><h1>રજીસ્ટ્રેશન સ્ટેટસ તપાસો</h1><p>રજીસ્ટ્રેશન વખતે આપેલો મોબાઈલ નંબર અને પેમેન્ટનો UTR / Transaction નંબર નાખો.</p></section>
+<section class="panel">
+<div class="field"><label for="statusMobile">મોબાઈલ નંબર</label><input id="statusMobile" type="tel" inputmode="numeric" maxlength="10" autocomplete="tel" placeholder="10 અંકનો મોબાઈલ નંબર"></div>
+<div class="field"><label for="statusUtr">UTR / Transaction નંબર</label><input id="statusUtr" maxlength="100" autocomplete="off" placeholder="પેમેન્ટ વખતે આપેલો UTR નંબર"></div>
+<button id="checkStatus" type="button">સ્ટેટસ તપાસો</button>
+<div id="statusResult" class="result" role="status" aria-live="polite"></div>
+<p class="hint">નોંધ: પેમેન્ટ Admin દ્વારા ચકાસાયા પછી જ રજીસ્ટ્રેશન મંજૂર થશે. મંજૂરી મળ્યા પછી તમારો Registration Number અહીં દેખાશે.</p>
+</section>
+<div class="back"><a href="./">← મુખ્ય રજીસ્ટ્રેશન પેજ પર પાછા જાઓ</a></div>
+</main>
+<script>
+const SUPABASE_URL = "https://wlxdouupmohrynisybfy.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_U0pCOp0iNEEreyDUjdLrKw_PhyFAIig";
+const button = document.getElementById("checkStatus");
+button.addEventListener("click", async () => {
+  const mobile = document.getElementById("statusMobile").value.trim();
+  const reference = document.getElementById("statusUtr").value.trim();
+  const result = document.getElementById("statusResult");
+  result.className = "result";
+  if (!/^[6-9][0-9]{9}$/.test(mobile) || !reference) {
+    result.className = "result show error";
+    result.textContent = "યોગ્ય 10 અંકનો મોબાઈલ નંબર અને UTR નંબર નાખો.";
+    return;
+  }
+  button.disabled = true;
+  button.textContent = "તપાસ થઈ રહી છે...";
+  try {
+    const response = await fetch(SUPABASE_URL + "/rest/v1/rpc/check_registration_payment_status", {
+      method: "POST",
+      headers: {"apikey": SUPABASE_PUBLISHABLE_KEY, "Content-Type": "application/json"},
+      body: JSON.stringify({p_mobile: mobile, p_payment_reference: reference})
+    });
+    if (!response.ok) throw new Error("સ્ટેટસ તપાસી શકાયું નથી. થોડી વાર પછી ફરી પ્રયાસ કરો.");
+    const matches = await response.json();
+    if (!matches.length) {
+      result.className = "result show error";
+      result.textContent = "આ મોબાઈલ અને UTR નંબર સાથે કોઈ રજીસ્ટ્રેશન મળ્યું નથી. વિગતો ફરી તપાસો.";
+    } else {
+      const item = matches[0];
+      const statusText = item.payment_status === "paid" ? "પેમેન્ટ મંજૂર થયું છે." :
+        item.payment_status === "failed" ? "પેમેન્ટ મંજૂર થયું નથી. Adminનો સંપર્ક કરો." :
+        item.payment_status === "refunded" ? "પેમેન્ટ રિફંડ થયું છે." :
+        "પેમેન્ટની Admin દ્વારા ચકાસણી બાકી છે.";
+      result.className = "result show " + (item.payment_status === "paid" ? "success" : "info");
+      result.textContent = item.registration_type + ": " + statusText +
+        (item.registration_number ? " તમારો રજીસ્ટ્રેશન નંબર: " + item.registration_number : " મંજૂરી પછી રજીસ્ટ્રેશન નંબર અહીં દેખાશે.");
+    }
+  } catch (error) {
+    result.className = "result show error";
+    result.textContent = error.message || "કનેક્શન સમસ્યા છે.";
+  } finally {
+    button.disabled = false;
+    button.textContent = "સ્ટેટસ તપાસો";
+  }
+});
+</script>
+</body></html>
