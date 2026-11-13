@@ -159,7 +159,7 @@ document.getElementById("confirmPayment").addEventListener("click", async () => 
     });
     if (!response.ok) {
       const details = await response.text();
-      console.error("Supabase registration error:", response.status, details);
+      console.error("Registration submission error:", response.status, details);
       throw new Error("માહિતી મોકલી શકાઈ નથી. UTR નંબર અને ઇન્ટરનેટ તપાસીને ફરી પ્રયાસ કરો.");
     }
     pendingRegistration = null;
