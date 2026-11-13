@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="gu">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#101827">
+<title>Taxi Management | Admin</title>
+<style>
+:root{font-family:system-ui,-apple-system,"Noto Sans Gujarati",sans-serif;color:#142033;background:#f3f6fb}
+*{box-sizing:border-box}body{margin:0}.top{background:#101827;color:white;padding:18px max(18px,calc((100% - 1100px)/2));display:flex;align-items:center;justify-content:space-between}.brand{font-size:19px;font-weight:800}.brand small{display:block;color:#aebbd0;font-size:11px;font-weight:500;letter-spacing:1px}.wrap{max-width:1100px;margin:30px auto;padding:0 16px 50px}.card{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:22px;box-shadow:0 8px 30px #1420330a}.login{max-width:440px;margin:60px auto}.muted{color:#66758c;font-size:14px;line-height:1.6}label{display:block;font-size:13px;font-weight:700;margin:14px 0 6px}input{width:100%;padding:12px;border:1px solid #d7dfeb;border-radius:9px;font:inherit}button{border:0;border-radius:9px;padding:11px 16px;background:#2457e6;color:white;font:inherit;font-weight:700;cursor:pointer}button:disabled{opacity:.6}.secondary{background:#e9eef8;color:#1a2b45}.error{color:#a42d2d;background:#fff0f0;padding:11px;border-radius:9px;margin-top:13px}.hidden{display:none!important}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:20px 0}.stat strong{display:block;font-size:26px}.tabs{display:flex;gap:9px;flex-wrap:wrap;margin:18px 0}.tab.active{background:#142033}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;min-width:700px}th,td{text-align:left;padding:12px;border-bottom:1px solid #e8edf4;font-size:13px}th{color:#64748b;background:#f8fafd}.status{display:inline-block;border-radius:20px;padding:4px 9px;background:#fff3d9;color:#855500;font-size:12px}.empty{text-align:center;color:#718096;padding:30px}.bar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}.bar h2{margin:0}.small{font-size:12px;color:#6c7a90}@media(max-width:650px){.stats{grid-template-columns:1fr 1fr}.card{padding:16px}.wrap{margin-top:18px}}
+</style>
+</head>
+<body>
+<header class="top"><div class="brand">🚕 Taxi Management<small>ADMIN DASHBOARD</small></div><button id="logout" class="secondary hidden">Logout</button></header>
+<main class="wrap">
+<section id="loginCard" class="card login">
+<h1>Admin Login</h1><p class="muted">રજિસ્ટ્રેશન જોવા માટે અધિકૃત Admin તરીકે લૉગિન કરો.</p>
+<form id="loginForm"><label for="email">Admin Email</label><input id="email" type="email" autocomplete="username" required placeholder="admin@example.com"><label for="password">Password</label><input id="password" type="password" autocomplete="current-password" required><button id="loginButton" style="width:100%;margin-top:18px">Login</button></form>
+<div id="loginError" class="error hidden" role="alert"></div>
+<p class="small">આ ડેશબોર્ડમાં પ્રવેશ માટે Supabase Auth user પર app_metadata role = admin હોવું જરૂરી છે.</p>
+</section>
+<section id="dashboard" class="hidden">
+<div class="bar"><div><h1>Admin Dashboard</h1><p class="muted">રજિસ્ટ્રેશનની વિગતો અને પેમેન્ટ સ્ટેટસ</p></div><button id="refresh" class="secondary">Refresh</button></div>
+<div class="stats">
+<div class="card stat"><span class="muted">કુલ રજિસ્ટ્રેશન</span><strong id="total">0</strong></div>
+<div class="card stat"><span class="muted">Taxi Rent</span><strong id="rentTotal">0</strong></div>
+<div class="card stat"><span class="muted">Driver Job</span><strong id="driverTotal">0</strong></div>
+</div>
+<div class="card">
+<div class="bar"><h2 id="listTitle">Taxi Rent રજિસ્ટ્રેશન</h2><span class="small" id="lastUpdated"></span></div>
+<div class="tabs"><button class="tab active" data-tab="rent">Taxi Rent</button><button class="tab secondary" data-tab="driver">Driver Job</button></div>
+<div id="loadError" class="error hidden"></div>
+<div class="table-wrap"><table><thead id="tableHead"></thead><tbody id="tableBody"><tr><td class="empty">ડેટા લોડ થઈ રહ્યો છે...</td></tr></tbody></table></div>
+</div>
+</section>
+</main>
+<script type="module">
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+const SUPABASE_URL = "https://wlxdouupmohrynisybfy.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_U0pCOp0iNEEreyDUjdLrKw_PhyFAIig";
+const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+const $ = id => document.getElementById(id);
+let activeTab = "rent";
+let registrations = { rent: [], driver: [] };
+const columns = {
+ rent: [
+  ["registration_number","રજિસ્ટ્રેશન નંબર"],["full_name","નામ"],["mobile","મોબાઇલ"],["address","સરનામું"],["vehicle_name","ગાડી"],["vehicle_year","વર્ષ"],["payment_status","પેમેન્ટ"],["created_at","તારીખ"]
+ ],
+ driver: [
+  ["registration_number","રજિસ્ટ્રેશન નંબર"],["full_name","નામ"],["mobile","મોબાઇલ"],["address","સરનામું"],["license_number","લાયસન્સ"],["payment_status","પેમેન્ટ"],["created_at","તારીખ"]
+ ]
+};
+function message(el, text) { el.textContent = text; el.classList.remove("hidden"); }
+function fmtDate(value) { return value ? new Date(value).toLocaleString("gu-IN") : "—"; }
+function cell(value) {
+ const td = document.createElement("td");
+ if (value && typeof value === "object") value = JSON.stringify(value);
+ td.textContent = value == null || value === "" ? "—" : String(value);
+ return td;
+}
+function render() {
+ const rows = registrations[activeTab];
+ $("listTitle").textContent = activeTab === "rent" ? "Taxi Rent રજિસ્ટ્રેશન" : "Driver Job રજિસ્ટ્રેશન";
+ $("tableHead").replaceChildren();
+ const trh = document.createElement("tr");
+ columns[activeTab].forEach(([key,label]) => { const th=document.createElement("th"); th.textContent=label; trh.append(th); });
+ $("tableHead").append(trh);
+ $("tableBody").replaceChildren();
+ if (!rows.length) {
+  const tr=document.createElement("tr"),td=document.createElement("td"); td.colSpan=columns[activeTab].length;td.className="empty";td.textContent="હજુ કોઈ રજિસ્ટ્રેશન મળ્યું નથી.";tr.append(td);$("tableBody").append(tr);
+ } else {
+  rows.forEach(row => {
+   const tr=document.createElement("tr");
+   columns[activeTab].forEach(([key]) => {
+    let value = row[key];
+    if (key === "created_at") value=fmtDate(value);
+    const td=cell(value);
+    if(key==="payment_status"){td.replaceChildren();const badge=document.createElement("span");badge.className="status";badge.textContent=value==="paid"?"ચૂકવેલ":value==="failed"?"નિષ્ફળ":value==="refunded"?"રિફંડ":"બાકી";td.append(badge);}
+    tr.append(td);
+   });
+   $("tableBody").append(tr);
+  });
+ }
+ $("total").textContent=registrations.rent.length+registrations.driver.length;
+ $("rentTotal").textContent=registrations.rent.length;
+ $("driverTotal").textContent=registrations.driver.length;
+ $("lastUpdated").textContent="છેલ્લું અપડેટ: "+new Date().toLocaleTimeString("gu-IN");
+}
+async function loadData() {
+ $("loadError").classList.add("hidden");
+ const [rent,driver] = await Promise.all([
+  supabase.from("taxi_rent_registrations").select("registration_number,full_name,mobile,address,vehicle_name,vehicle_year,payment_status,created_at").order("created_at",{ascending:false}),
+  supabase.from("taxi_driver_job_registrations").select("registration_number,full_name,mobile,address,license_number,payment_status,created_at").order("created_at",{ascending:false})
+ ]);
+ if(rent.error || driver.error){message($("loadError"),"ડેટા લોડ થઈ શક્યો નથી: "+(rent.error?.message||driver.error?.message));return;}
+ registrations={rent:rent.data||[],driver:driver.data||[]};render();
+}
+async function showSession() {
+ const {data:{session}}=await supabase.auth.getSession();
+ if(!session){$("loginCard").classList.remove("hidden");$("dashboard").classList.add("hidden");$("logout").classList.add("hidden");return;}
+ const role=session.user.app_metadata?.role;
+ if(role!=="admin"){await supabase.auth.signOut();$("loginError").classList.remove("hidden");$("loginError").textContent="આ એકાઉન્ટને Admin પરવાનગી નથી. Admin સાથે સંપર્ક કરો.";return;}
+ $("loginCard").classList.add("hidden");$("dashboard").classList.remove("hidden");$("logout").classList.remove("hidden");await loadData();
+}
+$("loginForm").addEventListener("submit",async e=>{
+ e.preventDefault();$("loginButton").disabled=true;$("loginError").classList.add("hidden");
+ const {error}=await supabase.auth.signInWithPassword({email:$("email").value.trim(),password:$("password").value});
+ $("loginButton").disabled=false;
+ if(error){message($("loginError"),"લૉગિન થઈ શક્યું નથી. Email અને password તપાસો.");return;}
+ await showSession();
+});
+$("logout").addEventListener("click",async()=>{await supabase.auth.signOut();location.reload();});
+$("refresh").addEventListener("click",loadData);
+document.querySelectorAll(".tab").forEach(button=>button.addEventListener("click",()=>{
+ activeTab=button.dataset.tab;
+ document.querySelectorAll(".tab").forEach(b=>{b.classList.toggle("active",b.dataset.tab===activeTab);b.classList.toggle("secondary",b.dataset.tab!==activeTab);});
+ render();
+}));
+supabase.auth.onAuthStateChange(()=>setTimeout(showSession,0));
+showSession();
+</script>
+</body>
+</html>
