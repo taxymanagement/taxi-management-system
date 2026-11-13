@@ -44,7 +44,10 @@ form{padding:4px 24px 25px}.form-title{font-size:16px;margin:0 0 17px}.fields{di
 <p>તમારી UPI એપથી QR સ્કેન કરો. ચુકવણીની પુષ્ટિ થયા પછી જ રજીસ્ટ્રેશન મંજૂર થશે.</p>
 <img id="qrImage" alt="UPI payment QR code">
 <p id="upiHelp" style="font-size:12px;color:#64748b"></p>
-<p style="font-size:12px;color:#80520b">મહત્વપૂર્ણ: માત્ર QR સ્કેન કરવાથી પેમેન્ટ ચકાસાતું નથી. Admin દ્વારા ચુકવણી ચકાસ્યા પછી રજીસ્ટ્રેશન નંબર આપવામાં આવશે.</p>
+<label for="paymentReference" style="display:block;text-align:left;font-weight:700;margin-top:14px">પેમેન્ટ કર્યા પછી UTR / Transaction નંબર *</label>
+<input id="paymentReference" required maxlength="100" placeholder="UPI Transaction ID / UTR નંબર" style="width:100%;padding:12px;border:1px solid #dce3ee;border-radius:10px;font:inherit">
+<button id="confirmPayment" type="button" class="submit">પેમેન્ટ કર્યું — વિગતો મોકલો</button>
+<p style="font-size:12px;color:#80520b">મહત્વપૂર્ણ: માત્ર QR સ્કેન કરવાથી પેમેન્ટ ચકાસાતું નથી. Admin દ્વારા UTR ચકાસ્યા પછી જ રજીસ્ટ્રેશન નંબર આપવામાં આવશે.</p>
 </div>
 </section>
 <div class="foot">Taxi Registration • તમારી માહિતી સુરક્ષિત રાખવામાં આવશે.</div>
@@ -61,6 +64,7 @@ const form = document.getElementById("registrationForm");
 const notice = document.getElementById("notice");
 const submitButton = form.querySelector('button[type="submit"]');
 let type = "rent";
+let pendingRegistration = null;
 
 function showNotice(message, kind = "info") {
   notice.className = "notice show " + kind;
@@ -99,10 +103,9 @@ function showPaymentQr() {
   document.getElementById("paymentBox").scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
-form.addEventListener("submit", async event => {
+form.addEventListener("submit", event => {
   event.preventDefault();
   if (!form.reportValidity()) return;
-
   const values = new FormData(form);
   const common = {
     full_name: String(values.get("name") || "").trim(),
@@ -111,53 +114,64 @@ form.addEventListener("submit", async event => {
     payment_amount: 99,
     payment_status: "pending"
   };
-
-  let table;
-  let record;
   if (type === "rent") {
-    table = "taxi_rent_registrations";
-    record = {
-      ...common,
-      vehicle_name: String(values.get("vehicleName") || "").trim(),
-      vehicle_year: Number(values.get("vehicleYear"))
+    pendingRegistration = {
+      table: "taxi_rent_registrations",
+      record: {...common,
+        vehicle_name: String(values.get("vehicleName") || "").trim(),
+        vehicle_year: Number(values.get("vehicleYear"))
+      }
     };
   } else {
-    table = "taxi_driver_job_registrations";
-    record = {
-      ...common,
-      license_number: String(values.get("license") || "").trim()
+    pendingRegistration = {
+      table: "taxi_driver_job_registrations",
+      record: {...common,
+        license_number: String(values.get("license") || "").trim()
+      }
     };
   }
+  showPaymentQr();
+  showNotice("હવે QR સ્કેન કરીને ₹99 ચૂકવો. ત્યારબાદ UTR નંબર નાખીને વિગતો મોકલો.", "info");
+});
 
-  submitButton.disabled = true;
-  submitButton.textContent = "માહિતી સાચવી રહ્યા છીએ...";
-  notice.className = "notice";
-  notice.textContent = "";
-
+document.getElementById("confirmPayment").addEventListener("click", async () => {
+  if (!pendingRegistration) {
+    showNotice("પહેલાં રજીસ્ટ્રેશનની વિગતો ભરો.", "error");
+    return;
+  }
+  const reference = document.getElementById("paymentReference").value.trim();
+  if (!reference) {
+    showNotice("પેમેન્ટનો UTR / Transaction નંબર નાખો.", "error");
+    return;
+  }
+  const button = document.getElementById("confirmPayment");
+  button.disabled = true;
+  button.textContent = "માહિતી મોકલાઈ રહી છે...";
   try {
-    const response = await fetch(SUPABASE_URL + "/rest/v1/" + table, {
+    const response = await fetch(SUPABASE_URL + "/rest/v1/" + pendingRegistration.table, {
       method: "POST",
       headers: {
         "apikey": SUPABASE_PUBLISHABLE_KEY,
         "Content-Type": "application/json",
         "Prefer": "return=minimal"
       },
-      body: JSON.stringify(record)
+      body: JSON.stringify({...pendingRegistration.record, payment_reference: reference})
     });
-
     if (!response.ok) {
       const details = await response.text();
       console.error("Supabase registration error:", response.status, details);
-      throw new Error("માહિતી સાચવી શકાઈ નથી. કૃપા કરીને થોડી વાર પછી ફરી પ્રયાસ કરો.");
+      throw new Error("માહિતી મોકલી શકાઈ નથી. UTR નંબર અને ઇન્ટરનેટ તપાસીને ફરી પ્રયાસ કરો.");
     }
-
-    showNotice("તમારી વિગતો સફળતાપૂર્વક નોંધાઈ છે. હવે ₹99 ચૂકવો. ચુકવણી Admin દ્વારા ચકાસ્યા પછી જ રજીસ્ટ્રેશન મંજૂર થશે.", "info");
-    showPaymentQr();
+    pendingRegistration = null;
+    form.reset();
+    document.getElementById("paymentReference").value = "";
+    showNotice("તમારી વિગતો મળી ગઈ છે. પેમેન્ટ હાલ Pending છે. Admin UTR ચકાસીને મંજૂર કરશે; ત્યારબાદ જ Registration Number મળશે.", "info");
+    document.getElementById("paymentBox").classList.remove("show");
   } catch (error) {
-    showNotice(error.message || "કનેક્શન સમસ્યા છે. ઇન્ટરનેટ તપાસીને ફરી પ્રયાસ કરો.", "error");
+    showNotice(error.message || "કનેક્શન સમસ્યા છે. ફરી પ્રયાસ કરો.", "error");
   } finally {
-    submitButton.disabled = false;
-    submitButton.textContent = "આગળ વધો — ₹99 ચુકવણી →";
+    button.disabled = false;
+    button.textContent = "પેમેન્ટ કર્યું — વિગતો મોકલો";
   }
 });
 </script>
