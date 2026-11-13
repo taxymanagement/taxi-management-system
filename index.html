@@ -50,39 +50,115 @@ form{padding:4px 24px 25px}.form-title{font-size:16px;margin:0 0 17px}.fields{di
 <div class="foot">Taxi Registration • તમારી માહિતી સુરક્ષિત રાખવામાં આવશે.</div>
 </main>
 <script>
-// Merchant UPI ID supplied by the website owner.
+const SUPABASE_URL = "https://wlxdouupmohrynisybfy.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_U0pCOp0iNEEreyDUjdLrKw_PhyFAIig";
 const UPI_ID = "rakeshbaraiya365-3@oksbi";
 const PAYEE_NAME = "Taxi Registration";
 const AMOUNT = "99.00";
-const choices=[...document.querySelectorAll(".choice")],form=document.getElementById("registrationForm"),notice=document.getElementById("notice");
-let type="rent";
-function setType(next){
- type=next;choices.forEach(b=>b.classList.toggle("selected",b.dataset.type===next));
- const rent=next==="rent";
- document.getElementById("formHeading").textContent=rent?"Taxi Rent ની વિગતો":"Driver Job ની વિગતો";
- document.getElementById("vehicleNameField").classList.toggle("hidden",!rent);
- document.getElementById("vehicleYearField").classList.toggle("hidden",!rent);
- document.getElementById("licenseField").classList.toggle("hidden",rent);
- document.getElementById("vehicleName").required=rent;
- document.getElementById("vehicleYear").required=rent;
- document.getElementById("license").required=!rent;
- notice.className="notice";notice.textContent="";
- document.getElementById("paymentBox").classList.remove("show");
+
+const choices = [...document.querySelectorAll(".choice")];
+const form = document.getElementById("registrationForm");
+const notice = document.getElementById("notice");
+const submitButton = form.querySelector('button[type="submit"]');
+let type = "rent";
+
+function showNotice(message, kind = "info") {
+  notice.className = "notice show " + kind;
+  notice.textContent = message;
+  notice.scrollIntoView({ behavior: "smooth", block: "center" });
 }
-choices.forEach(b=>b.addEventListener("click",()=>setType(b.dataset.type)));
-form.addEventListener("submit",e=>{
- e.preventDefault();if(!form.reportValidity())return;
- if(!UPI_ID){
-  notice.className="notice info show";
-  notice.textContent="ફોર્મ તૈયાર છે. UPI QR Code સક્રિય કરવા માટે વેબસાઇટના માલિકનો સાચો UPI ID ઉમેરવો જરૂરી છે. હાલમાં કોઈ ચુકવણી લેવામાં આવતી નથી અને રજીસ્ટ્રેશન સેવ થતું નથી.";
-  notice.scrollIntoView({behavior:"smooth",block:"center"});return;
- }
- const data=new FormData(form),note=encodeURIComponent("Taxi "+(type==="rent"?"Rent":"Driver Job")+" Registration");
- const upi="upi://pay?pa="+encodeURIComponent(UPI_ID)+"&pn="+encodeURIComponent(PAYEE_NAME)+"&am="+AMOUNT+"&cu=INR&tn="+note;
- document.getElementById("qrImage").src="https://api.qrserver.com/v1/create-qr-code/?size=260x260&data="+encodeURIComponent(upi);
- document.getElementById("upiHelp").textContent="ચુકવણી માટે UPI ID: "+UPI_ID+" • રકમ: ₹99";
- document.getElementById("paymentBox").classList.add("show");
- document.getElementById("paymentBox").scrollIntoView({behavior:"smooth",block:"center"});
+
+function setType(next) {
+  type = next;
+  choices.forEach(button => button.classList.toggle("selected", button.dataset.type === next));
+  const rent = next === "rent";
+  document.getElementById("formHeading").textContent = rent ? "Taxi Rent ની વિગતો" : "Driver Job ની વિગતો";
+  document.getElementById("vehicleNameField").classList.toggle("hidden", !rent);
+  document.getElementById("vehicleYearField").classList.toggle("hidden", !rent);
+  document.getElementById("licenseField").classList.toggle("hidden", rent);
+  document.getElementById("vehicleName").required = rent;
+  document.getElementById("vehicleYear").required = rent;
+  document.getElementById("license").required = !rent;
+  notice.className = "notice";
+  notice.textContent = "";
+  document.getElementById("paymentBox").classList.remove("show");
+}
+
+choices.forEach(button => button.addEventListener("click", () => setType(button.dataset.type)));
+
+function showPaymentQr() {
+  const note = encodeURIComponent("Taxi " + (type === "rent" ? "Rent" : "Driver Job") + " Registration");
+  const upi = "upi://pay?pa=" + encodeURIComponent(UPI_ID) +
+    "&pn=" + encodeURIComponent(PAYEE_NAME) +
+    "&am=" + AMOUNT + "&cu=INR&tn=" + note;
+  document.getElementById("qrImage").src =
+    "https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=" + encodeURIComponent(upi);
+  document.getElementById("upiHelp").textContent =
+    "ચુકવણી માટે UPI ID: " + UPI_ID + " • રકમ: ₹99";
+  document.getElementById("paymentBox").classList.add("show");
+  document.getElementById("paymentBox").scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+form.addEventListener("submit", async event => {
+  event.preventDefault();
+  if (!form.reportValidity()) return;
+
+  const values = new FormData(form);
+  const common = {
+    full_name: String(values.get("name") || "").trim(),
+    address: String(values.get("address") || "").trim(),
+    mobile: String(values.get("mobile") || "").trim(),
+    payment_amount: 99,
+    payment_status: "pending"
+  };
+
+  let table;
+  let record;
+  if (type === "rent") {
+    table = "taxi_rent_registrations";
+    record = {
+      ...common,
+      vehicle_name: String(values.get("vehicleName") || "").trim(),
+      vehicle_year: Number(values.get("vehicleYear"))
+    };
+  } else {
+    table = "taxi_driver_job_registrations";
+    record = {
+      ...common,
+      license_number: String(values.get("license") || "").trim()
+    };
+  }
+
+  submitButton.disabled = true;
+  submitButton.textContent = "માહિતી સાચવી રહ્યા છીએ...";
+  notice.className = "notice";
+  notice.textContent = "";
+
+  try {
+    const response = await fetch(SUPABASE_URL + "/rest/v1/" + table, {
+      method: "POST",
+      headers: {
+        "apikey": SUPABASE_PUBLISHABLE_KEY,
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal"
+      },
+      body: JSON.stringify(record)
+    });
+
+    if (!response.ok) {
+      const details = await response.text();
+      console.error("Supabase registration error:", response.status, details);
+      throw new Error("માહિતી સાચવી શકાઈ નથી. કૃપા કરીને થોડી વાર પછી ફરી પ્રયાસ કરો.");
+    }
+
+    showNotice("તમારી વિગતો સફળતાપૂર્વક નોંધાઈ છે. હવે ₹99 ચૂકવો. ચુકવણી Admin દ્વારા ચકાસ્યા પછી જ રજીસ્ટ્રેશન મંજૂર થશે.", "info");
+    showPaymentQr();
+  } catch (error) {
+    showNotice(error.message || "કનેક્શન સમસ્યા છે. ઇન્ટરનેટ તપાસીને ફરી પ્રયાસ કરો.", "error");
+  } finally {
+    submitButton.disabled = false;
+    submitButton.textContent = "આગળ વધો — ₹99 ચુકવણી →";
+  }
 });
 </script>
 </body></html>
